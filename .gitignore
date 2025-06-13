@@ -35,3 +35,13 @@ out/
 
 ### VS Code ###
 .vscode/
+*.sqlite
+/.vs/ConfigServer/CopilotIndices/17.14.734.62261/CodeChunks.db
+/.vs/ConfigServer/CopilotIndices/17.14.734.62261/CodeChunks.db-shm
+/.vs/ConfigServer/CopilotIndices/17.14.734.62261/CodeChunks.db-wal
+/.vs/ConfigServer/CopilotIndices/17.14.734.62261/SemanticSymbols.db
+/.vs/ConfigServer/CopilotIndices/17.14.734.62261/SemanticSymbols.db-shm
+/.vs/ConfigServer/CopilotIndices/17.14.734.62261/SemanticSymbols.db-wal
+/.vs/ConfigServer/FileContentIndex/df5f4252-973f-49d6-902c-58db63b81b3d.vsidx
+*.vsidx
+/.vs/ProjectSettings.json
