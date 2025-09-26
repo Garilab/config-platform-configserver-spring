@@ -2,59 +2,106 @@ name: Deploy Config Server Prd
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag de imagen Docker (opcional). Ej: 1.2.3"
+        required: false
+        type: string
+      deploy:
+        description: "Hacer deploy a Kubernetes"
+        required: true
+        default: true
+        type: boolean
+      namespace:
+        description: "Namespace de K8s"
+        required: true
+        default: "app"
+        type: string
+      manifest:
+        description: "Ruta del manifiesto a aplicar"
+        required: true
+        default: "configserver-deployment-prd.yml"
+        type: string
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
+    env:
+      K8S_NAMESPACE: ${{ inputs.namespace || 'app' }}
+      MANIFEST_PATH: ${{ inputs.manifest || 'configserver-deployment-prd.yml' }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Git Semantic Version
-      uses: PaulHatch/semantic-version@v4.0.3
-      with:
-        major_pattern: "major:"
-        minor_pattern: "feat:"
-        format: "${major}.${minor}.${patch}-prerelease"
-      id: version
-        
-    - name: Docker login
-      env:
-        DOCKER_USER:  ${{ secrets.DOCKER_USERNAME }}
-        DOCKER_PASSWORD:  ${{ secrets.DOCKER_PASSWORD }}
-        
-      run: |
-        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+      - name: Git Semantic Version
+        id: version
+        uses: PaulHatch/semantic-version@v4.0.3
+        with:
+          major_pattern: "major:"
+          minor_pattern: "feat:"
+          format: "${major}.${minor}.${patch}-prerelease"
 
-    - name: Build Docker Image
-      env:
-        NEW_VERSION: ${{ steps.version.outputs.version }}
-      run: |
-        docker build -t alberth1414/config-server:$NEW_VERSION .
-        docker build -t alberth1414/config-server:latest .
-        
-    - name: Push Docker Image
-      env:
-        NEW_VERSION: ${{ steps.version.outputs.version }}
-      run: |
-        docker push alberth1414/config-server:$NEW_VERSION
-        docker push alberth1414/config-server:latest
+      # Elegir tag: si es manual y pasas image_tag -> úsalo; si no -> semver
+      - name: Compute image tag
+        id: compute
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.image_tag }}" ]; then
+            echo "NEW_VERSION=${{ inputs.image_tag }}" >> $GITHUB_ENV
+          else
+            echo "NEW_VERSION=${{ steps.version.outputs.version }}" >> $GITHUB_ENV
+          fi
 
-    - name: Set up kubectl
-      uses: azure/k8s-set-context@v1
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBE_CONFIG }}
-        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Deploy to Kubernetes
-      run: |
-        kubectl apply -f configserver-deployment-prd.yml --validate=false
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-${{ hashFiles('**/Dockerfile') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
+      - name: Docker login
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USER" --password-stdin
+
+      - name: Build Docker Image
+        run: |
+          docker buildx build \
+            --cache-from type=local,src=/tmp/.buildx-cache \
+            --cache-to type=local,dest=/tmp/.buildx-cache \
+            --tag alberth1414/config-server:${NEW_VERSION} \
+            --tag alberth1414/config-server:latest \
+            --load .
+
+      - name: Push Docker Image
+        run: |
+          docker push alberth1414/config-server:${NEW_VERSION}
+          docker push alberth1414/config-server:latest
+
+      # Deploy solo si:
+      # - No es manual (push/PR), o
+      # - Es manual y inputs.deploy == true
+      - name: Set up kubectl
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy == true }}
+        uses: azure/k8s-set-context@v1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      - name: Deploy to Kubernetes
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.deploy == true }}
+        run: |
+          kubectl apply -f "${MANIFEST_PATH}" --validate=false
+          # Reinicio opcional si tu deployment se llama 'config-server'
+          # kubectl rollout restart deployment config-server -n "${K8S_NAMESPACE}"
