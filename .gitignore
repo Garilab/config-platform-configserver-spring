@@ -45,3 +45,5 @@ out/
 /.vs/ConfigServer/FileContentIndex/df5f4252-973f-49d6-902c-58db63b81b3d.vsidx
 *.vsidx
 /.vs/ProjectSettings.json
+/.vs/config-platform-configserver-spring.slnx/v18/.wsuo
+/.vs/config-platform-configserver-spring.slnx/v18/DocumentLayout.json
