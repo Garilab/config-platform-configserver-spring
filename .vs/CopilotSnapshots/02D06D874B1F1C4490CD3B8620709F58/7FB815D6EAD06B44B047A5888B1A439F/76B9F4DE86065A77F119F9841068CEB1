@@ -1,4 +1,4 @@
-name: Deploy Config Server
+﻿name: Deploy Config Server
 
 on:
   push:
@@ -29,8 +29,7 @@ on:
           - "1"
           - "2"
           - "3"
-          - "4"
-          - "5"
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
